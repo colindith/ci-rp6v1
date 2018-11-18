@@ -1,0 +1,3 @@
+[submodule "moala"]
+	path = moala
+	url = https://github.com/colindith/Moala.git
