@@ -1,0 +1,132 @@
+# for ci-rp6v1 project
+version: '3.6'
+services:
+  taveuni-db:
+    restart: always
+    image: postgres:9.6.3-alpine
+    volumes:
+      - backup-data:/var/lib/postgresql/data
+    env_file:
+      - ./env/.dev
+      - ./env/.taveuni_conf
+    networks:
+      - ci-rp6v1
+    ports:
+      - "5432:5432"
+  taveuni-redis:
+    restart: always
+    image: redis:4.0.1-alpine
+    volumes:
+      - redis-data:/data
+    networks:
+      - ci-rp6v1
+    ports:
+      - "6379:6379"
+  taveuni-rabbitmq:  # taveuni-celery broker
+    restart: always
+    image: rabbitmq:3.6.11-management-alpine
+    env_file:
+      - ./env/.dev
+      - ./env/.taveuni_conf
+    networks:
+      - ci-rp6v1
+    ports:
+      - "5672:5672"
+      - "15673:15672"
+  taveuni-flower:  # taveuni-celery monitor
+    restart: always
+    image: deanunnotech/flower:latest
+    env_file:
+      - ./env/.dev
+      - ./env/.taveuni_conf
+    networks:
+      - ci-rp6v1
+    ports:
+      - "5555:5555"
+  taveuni:
+    restart: always
+    image: unnotechlottery/taveuni:latest
+    build: ./taveuni
+    depends_on:
+      - taveuni-db
+      - taveuni-redis
+    networks:
+      - ci-rp6v1
+    env_file:
+      - ./env/.dev
+      - ./env/.taveuni_conf
+    volumes:
+      - ./taveuni:/usr/src/app/
+    ports:
+      -  "8000:8000"
+    command: >
+      bash -c "python manage.py makemigrations &&
+               python manage.py migrate &&
+               python manage.py runserver 0.0.0.0:8000"
+#  taveuni-celery-broadcast-result-tasks:
+#    restart: always
+#    image: unnotechlottery/taveuni:latest
+#    build: ./taveuni
+#    depends_on:
+#      - taveuni-rabbitmq
+#      - taveuni-redis
+#    networks:
+#      - ci-rp6v1
+#    env_file:
+#      - ./.env
+#      - ./env/.dev
+#      - ./env/.taveuni_conf
+#    volumes:
+#      - ./taveuni:/usr/src/app/
+#    command: celery -A taveuni worker -l info -Q broadcast_result_tasks -b ${ASK_RESULTS_BROKER_URL} -n broadcast_result_tasks@%h_${CP}
+#  taveuni-celery-game:
+#    restart: always
+#    image: unnotechlottery/taveuni:latest
+#    build: ./taveuni
+#    depends_on:
+#      - taveuni-rabbitmq
+#      - taveuni-redis
+#    networks:
+#      - ci-rp6v1
+#    env_file:
+#      - ./env/.dev
+#      - ./env/.taveuni_conf
+#    volumes:
+#      - ./taveuni:/usr/src/app/
+#    command: celery -A taveuni worker -l info -Q game -n game@%h
+  taveuni-celery-schedules:
+    restart: always
+    image: unnotechlottery/taveuni:latest
+    build: ./taveuni
+    depends_on:
+      - taveuni-rabbitmq
+      - taveuni-redis
+    networks:
+      - ci-rp6v1
+    env_file:
+      - ./env/.dev
+      - ./env/.taveuni_conf
+    volumes:
+      - ./taveuni:/usr/src/app/
+    command: celery -A taveuni worker -l info -Q schedules -n schedules@%h
+  taveuni-celery-beat:
+    restart: always
+    image: unnotechlottery/taveuni:latest
+    build: ./taveuni
+    networks:
+      - ci-rp6v1
+    env_file:
+      - ./env/.dev
+      - ./env/.taveuni_conf
+    volumes:
+      - ./taveuni:/usr/src/app/
+    command: celery -A taveuni beat -l info --pidfile=
+
+networks:
+  ci-rp6v1:
+    driver: bridge
+
+volumes:
+  backup-data:  # taveuni db
+  redis-data:  # taveuni cache
+
